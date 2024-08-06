@@ -35,13 +35,13 @@ while True:
     print(divider + "\n")
 
     # Convert state to integer
-    state_index = int(state, 2)
+    state_int = int(state, 2)
 
     # Choose action based on epsilon-greedy policy
     if np.random.uniform(0, 1) < epsilon:
         action = np.random.choice([0, 1, 2])
     else:
-        action = np.argmax(Q[state_index])
+        action = np.argmax(Q[state_int])
     
     # Execute action and get new state and reward
     new_state, reward = cn.get_state_reward(connection, actions[action])
@@ -55,7 +55,7 @@ while True:
     
     # Update Q table
     best_future_q = np.max(Q[new_state_int])
-    Q[state_index, action] = (1 - alpha) * Q[state_index, action] + alpha * (reward + gamma * best_future_q)
+    Q[state_int, action] = (1 - alpha) * Q[state_int, action] + alpha * (reward + gamma * best_future_q)
     
     # Update state
     state = new_state

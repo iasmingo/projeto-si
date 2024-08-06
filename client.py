@@ -1,64 +1,87 @@
-import connection as cn
+import connection as con
+import random as rd
 import numpy as np
 
+# Inicializa a conexão
+cn = con.connect(2037)
 
-# Initialize connection
-connection = cn.connect(2037)
+# Função para recuperar o progresso da Q-table
+def recupera_tabela():
+    tabela = []
+    try:
+        with open("resultado.txt", "r") as file:
+            linhas = file.readlines()
+        for linha in linhas:
+            tabela.append([float(valor) for valor in linha.split()])
+        # Garantir que a tabela tenha o tamanho correto
+        while len(tabela) < 96:
+            tabela.append([0.0, 0.0, 0.0])
+    except IOError:
+        tabela = [[0.0, 0.0, 0.0] for _ in range(96)]
+    return tabela
 
-# Load Q table or initialize if file not found
-try:
-    Q = np.loadtxt('resultado.txt')
-except IOError:
-    Q = np.zeros([24 * 4, 3])
+# Função para salvar a Q-table
+def salva_tabela(tabela):
+    with open("resultado.txt", "w") as file:
+        for linha in tabela:
+            file.write(" ".join(map(str, linha)) + "\n")
 
-# Parameters
-alpha = 0.7  # Learning rate
-gamma = 0.95  # Discount factor
-epsilon = 0.1  # Exploration rate
+# Função de atualização Q-learning
+def atualiza_q(valor, alfa, gama, recompensa, maximo_futuro):
+    return (1 - alfa) * valor + alfa * (recompensa + gama * maximo_futuro)
 
-# Possible actions
-actions = ["left", "right", "jump"]
+# Inicializa a Q-table
+q_table = recupera_tabela()
 
-# Get initial state and reward
-state, reward = cn.get_state_reward(connection, "")
+# Parâmetros
+alfa = 0.7  # Taxa de aprendizado
+gama = 0.95  # Fator de desconto
+epsilon = 0.1  # Taxa de exploração
+episodios = 3  # Número de episódios
 
-# Extract initial platform and direction
-platform = int(state[2:7], 2)
-direction = int(state[-2:], 2)
+# Ações possíveis
+acoes = ['jump', 'left', 'right']
 
-divider = "=" * 30
-print(divider)
-print(f"\nState: {state}\nPlatform: {platform}\nDirection: {direction}\nReward: {reward}\n")
+# Função para decodificar o estado
+def decodifica_estado(estado):
+    plataforma = int(estado[2:7], 2)
+    direcao = int(estado[7:9], 2)
+    return plataforma, direcao
 
-# Main loop
-while True:
-    print(divider + "\n")
+# Loop principal
+for episodio in range(episodios):
+    print(f"Episódio {episodio + 1}/{episodios}")
 
-    # Convert state to integer
-    state_int = int(state, 2)
+    estado, recompensa = con.get_state_reward(cn, "")
+    estado_atual = (int(estado[2:7], 2) * 4) + (int(estado[7:9], 2) % 4)
 
-    # Choose action based on epsilon-greedy policy
-    if np.random.uniform(0, 1) < epsilon:
-        action = np.random.choice([0, 1, 2])
-    else:
-        action = np.argmax(Q[state_int])
-    
-    # Execute action and get new state and reward
-    new_state, reward = cn.get_state_reward(connection, actions[action])
-    new_state_int = int(new_state, 2)
-    
-    # Extract new platform and direction
-    platform = int(new_state[2:7], 2)
-    direction = int(new_state[-2:], 2)
-    
-    print(f"Action: {actions[action]}\nNew state: {new_state}\nPlatform: {platform}\nDirection: {direction}\nReward: {reward}\n")
-    
-    # Update Q table
-    best_future_q = np.max(Q[new_state_int])
-    Q[state_int, action] = (1 - alpha) * Q[state_int, action] + alpha * (reward + gamma * best_future_q)
-    
-    # Update state
-    state = new_state
+    while True:
+        print('==============================')
 
-    # Save updated Q table
-    np.savetxt('resultado.txt', Q)
+        # Política epsilon-greedy
+        if rd.random() < epsilon:
+            acao = rd.randint(0, 2)  # Exploração
+        else:
+            acao = np.argmax(q_table[estado_atual])  # Exploração
+
+        estado, recompensa = con.get_state_reward(cn, acoes[acao])
+        print(f'Estado: {estado} | Recompensa: {recompensa}')
+
+        if recompensa < -100:
+            alfa = 0.05
+
+        plataforma, direcao = decodifica_estado(estado)
+        estado_int = (plataforma * 4) + (direcao % 4)
+        max_q_valor = max(q_table[estado_int])
+        q_atual = atualiza_q(q_table[estado_atual][acao], alfa, gama, recompensa, max_q_valor)
+
+        q_table[estado_atual][acao] = q_atual
+        salva_tabela(q_table)
+
+        estado_atual = estado_int
+
+        if recompensa == -1:
+            break
+
+# Salva a Q-table final
+salva_tabela(q_table)
